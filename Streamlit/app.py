@@ -163,7 +163,7 @@ st.markdown("""
             color: #0369a1; font-size: 0.9em; margin-top: 5px; margin-bottom: 15px;
             border-left: 4px solid #0284c7;
         }
-        .doc-desc { color: #475569; font-size: 0.95em; margin-bottom: 10px; }
+        .doc-desc { color: inherit; font-size: 0.95em; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -685,7 +685,7 @@ if st.session_state.logged_in:
                     for doc in documents:
                         doc_id = doc[0]
                         with st.container(border=True):
-                            st.markdown(f"<h3 style='color:#0f172a; margin-bottom:5px;'>📑 {doc[1]}</h3>", unsafe_allow_html=True)
+                            st.markdown(f"<h3 style='color:inherit; margin-bottom:5px;'>📑 {doc[1]}</h3>", unsafe_allow_html=True)
                             st.markdown(f"<div class='doc-desc'>{doc[2] if doc[2] else 'Тайлбар оруулаагүй байна...'}</div>", unsafe_allow_html=True)
                             st.markdown(f"<div class='doc-meta'>👤 <b>Зохиогч:</b> {doc[5]} &nbsp;|&nbsp; 📅 <b>Огноо:</b> {doc[6]} &nbsp;|&nbsp; 📂 <b>Төрөл:</b> {doc[4]}</div>", unsafe_allow_html=True)
                             
