@@ -794,7 +794,7 @@ if st.session_state.logged_in:
                 for doc in documents:
                     doc_id = doc[0]
                     with st.container(border=True):
-                        st.markdown(f"<h3 style='color:#0f172a; margin-bottom:5px;'>📑 {doc[1]}</h3>", unsafe_allow_html=True)
+                        st.markdown(f"<h3 style='color:inherit; margin-bottom:5px;'>📑 {doc[1]}</h3>", unsafe_allow_html=True)
                         st.markdown(f"<div class='doc-desc'>{doc[2] if doc[2] else 'Тайлбар оруулаагүй байна...'}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='doc-meta'>👤 <b>Зохиогч:</b> {doc[5]} &nbsp;|&nbsp; 📅 <b>Огноо:</b> {doc[6]} &nbsp;|&nbsp; 📂 <b>Төрөл:</b> {doc[4]}</div>", unsafe_allow_html=True)
                         
