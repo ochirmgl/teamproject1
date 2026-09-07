@@ -554,29 +554,38 @@ def view_document_dialog(doc_title, file_path, file_type):
                 text_content = f.read()
             st.text_area("Агуулга:", text_content, height=400)
             
-        # 👉 Word файлыг автоматаар PDF рүү хөрвүүлж вэб дээр харуулах (Засвар орсон)
+             # Added by Ochir: preview DOCX text and tables without Microsoft Word.
         elif "wordprocessingml" in file_type.lower() or resolved_path.suffix.lower() == ".docx":
             try:
-                from docx2pdf import convert
-                import tempfile
-                import pythoncom
-                
-                # Windows COM thread алдаанаас сэргийлэх
-                pythoncom.CoInitialize()
-                
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    output_pdf_path = Path(tmpdirname) / f"{resolved_path.stem}.pdf"
-                    convert(str(resolved_path), str(output_pdf_path))
-                    
-                    if output_pdf_path.exists():
-                        with output_pdf_path.open("rb") as f:
-                            base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="700px" type="application/pdf" style="border-radius: 10px; border: 1px solid #ccc;"></iframe>'
-                        st.markdown(pdf_display, unsafe_allow_html=True)
-                    else:
-                        st.error("PDF рүү хөрвүүлэхэд алдаа гарлаа.")
-            except Exception as e:
-                st.error(f"Word файлыг PDF болгож харагдуулахад алдаа гарлаа: {e}")
+                from docx import Document
+                from docx.text.paragraph import Paragraph
+                from docx.table import Table
+
+                document = Document(str(resolved_path))
+
+                st.caption(
+                    "Текст болон хүснэгтийн харагдац. "
+                    "Эх загвар, зургийг харах бол файлыг татаж нээнэ үү."
+                )
+
+                for block in document.iter_inner_content():
+                    if isinstance(block, Paragraph):
+                        if block.text.strip():
+                            st.markdown(block.text)
+
+                    elif isinstance(block, Table):
+                        rows = [
+                            [cell.text for cell in row.cells]
+                            for row in block.rows
+                        ]
+                        if rows:
+                            st.table(rows)
+
+            except Exception:
+                st.error(
+                    "Word файлыг уншиж чадсангүй. "
+                    "Эх файлыг татаж шалгана уу."
+                )
 
 # --- БАРИМТЫГ ЗАСАХ БОЛОН ФАЙЛЫГ НЬ СОЛИХ ПОПАП ЦОНХ ---
 @st.dialog("✏️ Баримтын мэдээлэл засах")
