@@ -1,18 +1,16 @@
 import streamlit as st
 import os
 import json
-# Added by Ochir: pathlib is used so database and uploaded-file paths work
-# correctly even when Streamlit is launched from a different directory.
 from pathlib import Path
 from auth import register_user, login_user
 import sqlite3
 import base64
-# Added by Ochir: AI chat configuration and document-only RAG service.
+import pandas as pd
+import pypdfium2 as pdfium
+import mammoth
 from dotenv import load_dotenv
 from rag_service import DocumentRAG, RAGError, resolve_document_path
 
-
-# Added by Ochir: project-relative configuration for the AI chat and file access.
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "dms_system.db"
 load_dotenv(BASE_DIR / ".env")
@@ -23,7 +21,7 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 
 def get_config_value(name, default=None):
-    """Added by Ochir: read AI settings from .env or Streamlit secrets."""
+    """Read AI settings from .env or Streamlit secrets."""
     value = os.getenv(name)
     if value:
         return value
@@ -34,12 +32,10 @@ def get_config_value(name, default=None):
 
 
 def open_database():
-    """Added by Ochir: always open the database beside app.py."""
+    """Always open the database beside app.py."""
     return sqlite3.connect(DB_PATH)
 
 
-# Added by Ochir: existing teammate databases are upgraded automatically when
-# app.py starts. The old tables and their data are not deleted or replaced.
 def ensure_chat_schema():
     conn = open_database()
     cursor = conn.cursor()
@@ -85,91 +81,78 @@ def ensure_chat_schema():
 
 
 def local_file_path(stored_path):
-    """Added by Ochir: resolve database file paths safely on Windows/POSIX."""
-    return resolve_document_path(BASE_DIR, stored_path)
+    """Safely resolve file paths across Windows and Linux."""
+    clean_path = str(stored_path).replace("\\", "/")
+    return resolve_document_path(BASE_DIR, clean_path)
+
 
 # Page тохиргоо (Wide layout, icon)
 st.set_page_config(page_title="DMS System", page_icon="📁", layout="wide")
 ensure_chat_schema()
 
 # ==========================================
-# 🎨 ЗАГВАР САЙЖРУУЛАХ CUSTOM CSS (ЗАСВАР ОРСОН)
+# 🎨 ЗАГВАР САЙЖРУУЛАХ CUSTOM CSS
 # ==========================================
 st.markdown("""
     <style>
-   /* Added by Ochir: use Streamlit's selected theme colors. */
-[data-testid="stChatMessage"] {
-    border: 1px solid rgba(128, 128, 128, 0.30);
-    border-radius: 12px;
-    padding: 8px 12px;
-}
-        /* Added by Ochir: never collapse an AI answer to a fixed number of lines. */
-        [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
-        [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
-            max-height: none !important;
-            overflow: visible !important;
-            display: block !important;
-            -webkit-line-clamp: unset !important;
-            white-space: normal !important;
-        }
-        
-        /* Хажуугийн цэсний дэвсгэр */
-        [data-testid="stSidebar"] { 
-            background-color: #1e293b; 
-            border-right: 1px solid #334155; 
-        }
-        
-        /* --- ХАЖУУГИЙН ЦЭСНИЙ БИЧГҮҮДИЙГ ЦАГААН БОЛГОХ --- */
-        [data-testid="stSidebar"] p, 
-        [data-testid="stSidebar"] span, 
-        [data-testid="stSidebar"] label { 
-            color: #f8fafc !important; 
-        }
-        
-        /* ҮНДСЭН ЦЭС гэсэн гарчгийг арай бүдэг саарал болгох */
-        [data-testid="stSidebar"] .stRadio > label p {
-            color: #94a3b8 !important; 
-            font-size: 0.9em;
-        }
-        
-        /* Радио товчны Hover эффект */
-        [data-testid="stSidebar"] div[role="radiogroup"] > label { 
-            padding: 10px; 
-            border-radius: 5px; 
-            transition: 0.3s; 
-            cursor: pointer; 
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:hover { 
-            background-color: #334155 !important; 
-        }
-
-        /* --- СИСТЕМЭЭС ГАРАХ ТОВЧИЙГ УЛААН БОЛГОХ --- */
-        [data-testid="stSidebar"] .stButton > button {
-            background-color: #ef4444 !important;
-            color: white !important;
-            border: none !important;
-        }
-        [data-testid="stSidebar"] .stButton > button p {
-            color: white !important;
-            font-weight: bold;
-        }
-        [data-testid="stSidebar"] .stButton > button:hover {
-            background-color: #dc2626 !important;
-        }
-
-        /* Баримтын картын мэдээлэл */
-        /* Added by Ochir: support Light and Dark themes. */
-.doc-meta {
-    background-color: rgba(2, 132, 199, 0.10);
-    color: inherit;
-    padding: 10px 15px;
-    border-radius: 8px;
-    font-size: 0.9em;
-    margin-top: 5px;
-    margin-bottom: 15px;
-    border-left: 4px solid #0284c7;
-}
-        .doc-desc { color: inherit; font-size: 0.95em; margin-bottom: 10px; }
+    [data-testid="stChatMessage"] {
+        border: 1px solid rgba(128, 128, 128, 0.30);
+        border-radius: 12px;
+        padding: 8px 12px;
+    }
+    [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
+    [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
+        max-height: none !important;
+        overflow: visible !important;
+        display: block !important;
+        -webkit-line-clamp: unset !important;
+        white-space: normal !important;
+    }
+    [data-testid="stSidebar"] { 
+        background-color: #1e293b; 
+        border-right: 1px solid #334155; 
+    }
+    [data-testid="stSidebar"] p, 
+    [data-testid="stSidebar"] span, 
+    [data-testid="stSidebar"] label { 
+        color: #f8fafc !important; 
+    }
+    [data-testid="stSidebar"] .stRadio > label p { 
+        color: #94a3b8 !important; 
+        font-size: 0.9em; 
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label { 
+        padding: 10px; 
+        border-radius: 5px; 
+        transition: 0.3s; 
+        cursor: pointer; 
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover { 
+        background-color: #334155 !important; 
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background-color: #ef4444 !important;
+        color: white !important;
+        border: none !important;
+    }
+    [data-testid="stSidebar"] .stButton > button p {
+        color: white !important;
+        font-weight: bold;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #dc2626 !important;
+    }
+    .doc-meta {
+        background-color: rgba(2, 132, 199, 0.10);
+        color: inherit;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 0.9em;
+        margin-top: 5px;
+        margin-bottom: 15px;
+        border-left: 4px solid #0284c7;
+    }
+    .doc-desc { color: inherit; font-size: 0.95em; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -180,7 +163,6 @@ if 'username' not in st.session_state:
     st.session_state.username = ""
 if 'role' not in st.session_state:
     st.session_state.role = ""
-# Added by Ochir: AI чатын түүхийг тухайн session-д хадгалах.
 if 'chat_messages' not in st.session_state:
     st.session_state.chat_messages = []
 if 'active_chat_session_id' not in st.session_state:
@@ -189,9 +171,7 @@ if 'loaded_chat_session_id' not in st.session_state:
     st.session_state.loaded_chat_session_id = None
 
 
-# ==================== ADDED BY OCHIR: AI CHAT HELPERS ====================
-# Teammate-ийн үндсэн DMS кодыг өөрчлөхгүйгээр active баримтуудыг унших,
-# RAG index үүсгэх, ерөнхий асуулт болон эх сурвалжийг боловсруулах функцууд.
+# ==================== AI CHAT HELPERS ====================
 def fetch_chat_documents():
     conn = open_database()
     cursor = conn.cursor()
@@ -256,7 +236,6 @@ def current_user_id():
     return row[0] if row else None
 
 
-# Added by Ochir: persistent, user-specific chat history stored in SQLite.
 def create_chat_session(user_id):
     conn = open_database()
     cursor = conn.cursor()
@@ -319,7 +298,6 @@ def load_chat_messages(session_id, user_id):
     return messages
 
 
-# Added by Ochir: rename a chat without changing or deleting its messages.
 def rename_chat_session(session_id, user_id, new_title):
     title = " ".join(new_title.split())[:80]
     if not title:
@@ -338,11 +316,10 @@ def rename_chat_session(session_id, user_id, new_title):
     conn.close()
     return renamed
 
-# Added by Ochir: delete a specific chat session from the database.
+
 def delete_chat_session(session_id, user_id):
     conn = open_database()
     cursor = conn.cursor()
-    # ON DELETE CASCADE тохируулагдсан тул message болон document холбоосууд давхар устана
     cursor.execute(
         "DELETE FROM chat_sessions WHERE id = ? AND user_id = ?",
         (session_id, user_id),
@@ -353,9 +330,6 @@ def delete_chat_session(session_id, user_id):
     return deleted
 
 
-# Added by Ochir: save the user question and assistant answer together only
-# after generation finishes. A refresh during a slow API call will therefore
-# not leave a duplicated, unanswered user message in persistent history.
 def save_chat_exchange(session_id, user_id, question, answer, sources=None):
     conn = open_database()
     cursor = conn.cursor()
@@ -464,7 +438,6 @@ def render_chat_sources(sources):
 
 
 def answer_system_question(question, selected_document_ids, documents):
-    """Added by Ochir: answer greetings/file questions without document search."""
     normalised = " ".join(question.lower().strip().split())
     selected_id_set = set(selected_document_ids)
     selected = [document for document in documents if document["id"] in selected_id_set]
@@ -484,11 +457,7 @@ def answer_system_question(question, selected_document_ids, documents):
         )
 
     help_patterns = (
-        "what can you do",
-        "how can you help",
-        "чи юу хийж чадах",
-        "яаж ашиглах",
-        "тусламж",
+        "what can you do", "how can you help", "чи юу хийж чадах", "яаж ашиглах", "тусламж"
     )
     if any(pattern in normalised for pattern in help_patterns):
         return (
@@ -498,27 +467,15 @@ def answer_system_question(question, selected_document_ids, documents):
         )
 
     count_patterns = (
-        "how many files",
-        "how many documents",
-        "number of files",
-        "хэдэн файл",
-        "хэдэн баримт",
-        "файлын тоо",
-        "баримтын тоо",
+        "how many files", "how many documents", "number of files", "хэдэн файл",
+        "хэдэн баримт", "файлын тоо", "баримтын тоо"
     )
     if any(pattern in normalised for pattern in count_patterns):
         return f"Одоогоор AI чатад {len(selected)} баримт сонгогдсон байна."
 
     list_patterns = (
-        "what files",
-        "which files",
-        "list files",
-        "list documents",
-        "файлуудын нэр",
-        "баримтуудын нэр",
-        "ямар файл",
-        "ямар баримт",
-        "баримтын жагсаалт",
+        "what files", "which files", "list files", "list documents", "файлуудын нэр",
+        "баримтуудын нэр", "ямар файл", "ямар баримт", "баримтын жагсаалт"
     )
     if any(pattern in normalised for pattern in list_patterns):
         if not selected:
@@ -529,123 +486,78 @@ def answer_system_question(question, selected_document_ids, documents):
         return f"AI чатад сонгосон баримтууд:\n\n{names}"
 
     return None
-# ================== END ADDED BY OCHIR: AI CHAT HELPERS ==================
 
-## --- ФАЙЛЫГ ШУУД ВЭБ ДЭЭР ХАРАХ (VIEWER DIALOG) ---
-# --- ФАЙЛЫГ ШУУД ВЭБ ДЭЭР ХАРАХ (VIEWER DIALOG) ---
+
+# --- ФАЙЛЫГ ШУУД ВЭБ ДЭЭР НАЙДВАРТАЙ ХАРАХ (VIEWER DIALOG) ---
 @st.dialog("👀 Баримт бичиг үзэх", width="large")
 def view_document_dialog(doc_title, file_path, file_type):
     st.markdown(f"<h3 style='color:#0284c7;'>📑 {doc_title}</h3>", unsafe_allow_html=True)
-    st.markdown(f"<div class='doc-meta'>📂 Файлын төрөл: <b>{file_type}</b></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='doc-meta'>📂 Файлын төрөл: <b>{file_type or 'Тодорхойгүй'}</b></div>", unsafe_allow_html=True)
 
     resolved_path = local_file_path(file_path)
-    if resolved_path.exists():
-        if "pdf" in file_type.lower():
-            with resolved_path.open("rb") as f:
-                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="700px" type="application/pdf" style="border-radius: 10px; border: 1px solid #ccc;"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
-            
-        elif any(img_type in file_type.lower() for img_type in ["image", "png", "jpg", "jpeg"]):
-            st.image(str(resolved_path), use_container_width=True, clamp=True)
-            
-        elif "text" in file_type.lower():
-            with resolved_path.open("r", encoding="utf-8", errors="ignore") as f:
-                text_content = f.read()
-            st.text_area("Агуулга:", text_content, height=400)
-            
-                     # Added by Ochir: render the DOCX file as formatted pages.
-        elif "wordprocessingml" in file_type.lower() or resolved_path.suffix.lower() == ".docx":
-            import html
-            import streamlit.components.v1 as components
+    if not resolved_path.exists():
+        st.error("Файл сервер дээр олдсонгүй.")
+        return
 
-            encoded = base64.b64encode(
-                resolved_path.read_bytes()
-            ).decode("ascii")
+    ext = resolved_path.suffix.lower()
+    m_type = (file_type or "").lower()
 
-            viewer_html = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none';
-               script-src 'unsafe-inline' https://cdn.jsdelivr.net;
-               style-src 'unsafe-inline';
-               img-src data: blob:;
-               font-src data: blob:;
-               connect-src 'none';">
-<style>
-    body {
-        margin: 0;
-        background: #e5e7eb;
-        color: #111827;
-        font-family: Arial, sans-serif;
-    }
-    #status {
-        padding: 16px;
-    }
-    .docx-wrapper {
-        padding: 16px !important;
-    }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.7/dist/docx-preview.min.js"></script>
-</head>
-<body>
-<div id="status">Баримтыг нээж байна...</div>
-<div id="pages"></div>
+    # --- 1. PDF (Сервер дээр хуудас бүрийг зураг болгон 100% найдвартай харуулах) ---
+    if ext == ".pdf" or "pdf" in m_type:
+        try:
+            pdf = pdfium.PdfDocument(str(resolved_path))
+            num_pages = len(pdf)
+            for page_idx in range(num_pages):
+                page = pdf[page_idx]
+                image = page.render(scale=2).to_pil()
+                st.image(image, use_container_width=True)
+                if page_idx < num_pages - 1:
+                    st.divider()
+        except Exception as e:
+            st.error(f"PDF файлыг уншихад алдаа гарлаа: {e}")
 
-<script>
-(async function () {
-    const status = document.getElementById("status");
-
-    try {
-        const bytes = Uint8Array.from(
-            atob("__DOCX_DATA__"),
-            character => character.charCodeAt(0)
-        );
-
-        await docx.renderAsync(
-            bytes,
-            document.getElementById("pages"),
-            null,
-            {
-                inWrapper: true,
-                breakPages: true,
-                ignoreLastRenderedPageBreak: false,
-                renderHeaders: true,
-                renderFooters: true,
-                renderAltChunks: false,
-                useBase64URL: true
-            }
-        );
-
-        status.remove();
-    } catch (error) {
-        status.textContent =
-            "Баримтыг харуулж чадсангүй. Эх файлыг татаж нээнэ үү.";
-    }
-})();
-</script>
-</body>
-</html>
-"""
-            viewer_html = viewer_html.replace(
-                "__DOCX_DATA__", encoded
+    # --- 2. Word (.docx - Зургийг таслахгүйгээр HTML болгон найдвартай харуулах) ---
+    elif ext == ".docx" or "wordprocessingml" in m_type:
+        try:
+            with resolved_path.open("rb") as docx_file:
+                result = mammoth.convert_to_html(docx_file)
+                html_content = result.value
+            st.markdown(
+                f"""
+                <div style="background-color: white; color: #111; padding: 25px; border-radius: 8px; border: 1px solid #ddd; max-height: 700px; overflow-y: auto;">
+                    {html_content}
+                </div>
+                """,
+                unsafe_allow_html=True
             )
+        except Exception as e:
+            st.error(f"Word файлыг уншихад алдаа гарлаа: {e}")
 
-            frame = (
-                '<iframe title="Word document preview" '
-                'sandbox="allow-scripts" '
-                'referrerpolicy="no-referrer" '
-                'style="width:100%;height:740px;border:0;" '
-                'srcdoc="'
-                + html.escape(viewer_html, quote=True)
-                + '"></iframe>'
-            )
+    # --- 3. Excel (.xlsx, .xls) ---
+    elif ext in [".xlsx", ".xls"] or "spreadsheet" in m_type or "excel" in m_type:
+        try:
+            excel_file = pd.ExcelFile(resolved_path)
+            sheet_names = excel_file.sheet_names
+            selected_sheet = st.selectbox("Хүснэгтийн хуудас (Sheet):", sheet_names) if len(sheet_names) > 1 else sheet_names[0]
+            df = pd.read_excel(resolved_path, sheet_name=selected_sheet)
+            st.dataframe(df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Excel файлыг уншиж чадсангүй: {e}")
 
-            components.html(frame, height=760)
+    # --- 4. Зураг (PNG, JPG, JPEG, WEBP) ---
+    elif ext in [".png", ".jpg", ".jpeg", ".webp"] or any(t in m_type for t in ["image", "png", "jpeg", "jpg"]):
+        with resolved_path.open("rb") as img_file:
+            st.image(img_file.read(), use_container_width=True)
+
+    # --- 5. Текст / CSV ---
+    elif ext in [".txt", ".csv", ".log"] or "text" in m_type:
+        with resolved_path.open("r", encoding="utf-8", errors="ignore") as f:
+            st.text_area("Агуулга:", f.read(), height=450)
+
+    else:
+        st.info("Энэ төрлийн файлыг харах боломжгүй байна. 'Татах' товчийг ашиглана уу.")
+
+
 # --- БАРИМТЫГ ЗАСАХ БОЛОН ФАЙЛЫГ НЬ СОЛИХ ПОПАП ЦОНХ ---
 @st.dialog("✏️ Баримтын мэдээлэл засах")
 def edit_document_dialog(doc_id, current_title, current_desc, current_author, current_file_path):
@@ -657,8 +569,11 @@ def edit_document_dialog(doc_id, current_title, current_desc, current_author, cu
         
         current_name = Path(str(current_file_path).replace("\\", "/")).name
         st.markdown(f"<div class='doc-meta'>Одоогийн файл: <b>{current_name}</b></div>", unsafe_allow_html=True)
-        # Хуучин: type=["pdf", "docx", "txt", "png", "jpg"]
-        uploaded_file = st.file_uploader("Файлаа чирж оруулах эсвэл сонгох", type=["pdf", "doc", "docx", "txt", "png", "jpg"])
+        
+        uploaded_file = st.file_uploader(
+            "Файлаа чирж оруулах эсвэл сонгох", 
+            type=["pdf", "doc", "docx", "xls", "xlsx", "txt", "csv", "png", "jpg", "jpeg", "webp"]
+        )
         
         col_submit1, col_submit2 = st.columns(2)
         with col_submit1:
@@ -706,7 +621,6 @@ if st.session_state.logged_in:
         st.markdown(f"<p style='color: #94a3b8; margin-top: 0;'>Эрх: <b>{st.session_state.role}</b></p>", unsafe_allow_html=True)
         st.divider()
         
-        # Үндсэн цэсний сонголт
         page_selection = st.radio("ҮНДСЭН ЦЭС", ["📁 Баримт бичиг", "💬 Шинэ чат (AI)"])
         
         st.divider()
@@ -748,7 +662,6 @@ if st.session_state.logged_in:
                 search_query = st.text_input("🔍 Баримт хайх (Гарчиг эсвэл зохиогчоор)...", placeholder="Энд бичиж хайна уу...")
                 conn = open_database()
                 cursor = conn.cursor()
-                                # Added by Ochir: case-insensitive Mongolian/English search.
                 cursor.execute("""
                     SELECT id, title, description, file_path, file_type,
                            source_author, upload_date
@@ -817,7 +730,10 @@ if st.session_state.logged_in:
                     doc_title = st.text_input("Баримтын гарчиг*")
                     doc_desc = st.text_area("Тайлбар")
                     doc_author = st.text_input("Зохиогч / Эх сурвалж")
-                    uploaded_file = st.file_uploader("Файлаа чирж оруулах эсвэл сонгох", type=["pdf", "doc", "docx", "txt", "png", "jpg"])
+                    uploaded_file = st.file_uploader(
+                        "Файлаа чирж оруулах эсвэл сонгох", 
+                        type=["pdf", "doc", "docx", "xls", "xlsx", "txt", "csv", "png", "jpg", "jpeg", "webp"]
+                    )
                     
                     submit_button = st.form_submit_button("Файлыг хадгалах", type="primary")
                     
@@ -861,7 +777,6 @@ if st.session_state.logged_in:
             search_query = st.text_input("🔍 Баримт хайх (Гарчиг эсвэл зохиогчоор)...", placeholder="Хайх үгээ бичнэ үү...")
             conn = open_database()
             cursor = conn.cursor()
-                       # Added by Ochir: case-insensitive Mongolian/English search.
             cursor.execute("""
                 SELECT id, title, description, file_path, file_type,
                        source_author, upload_date
@@ -913,8 +828,6 @@ if st.session_state.logged_in:
     # ==========================================
     # ХУУДАС 2: ШИНЭ ЧАТ (AI CHAT)
     # ==========================================
-    # Added by Ochir: teammate-ийн placeholder chat UI-г сонгосон PDF/DOCX-оос
-    # хариулдаг, эх сурвалж харуулдаг ажилладаг RAG чат болгон хэрэгжүүлсэн.
     elif page_selection == "💬 Шинэ чат (AI)":
         st.markdown("<h1>💬 Баримт бичигтэй харилцах AI туслах</h1>", unsafe_allow_html=True)
         st.caption(
@@ -928,8 +841,6 @@ if st.session_state.logged_in:
             st.error("Нэвтэрсэн хэрэглэгчийн мэдээлэл олдсонгүй.")
             st.stop()
 
-        # Added by Ochir: "Чатыг цэвэрлэх"-ийн оронд шинэ чат болон
-        # SQLite-д хадгалагдсан өмнөх чатуудыг сонгох хэсэг.
         sessions = list_chat_sessions(user_id)
         session_ids = [session["id"] for session in sessions]
         if st.session_state.active_chat_session_id not in session_ids:
@@ -940,10 +851,6 @@ if st.session_state.logged_in:
                 sessions = list_chat_sessions(user_id)
             st.session_state.loaded_chat_session_id = None
 
-        # Added by Ochir: keep old chats, allow manual renaming, and start a
-        # separate conversation without deleting the previous one.
-        # Added by Ochir: keep old chats, allow manual renaming, deleting, and start a
-        # separate conversation without deleting the previous one.
         history_column, rename_column, delete_column, new_chat_column = st.columns([3, 1, 1, 1])
         
         with new_chat_column:
@@ -986,7 +893,6 @@ if st.session_state.logged_in:
                     else:
                         st.warning("Чатын нэр хоосон байж болохгүй.")
 
-        # 👉 ШИНЭЭР НЭМЭГДСЭН: Устгах товчлуурын хэсэг
         with delete_column:
             st.write("")
             with st.popover("🗑️ Устгах", use_container_width=True):
@@ -1034,8 +940,7 @@ if st.session_state.logged_in:
             if document_id in document_map
         ]
         default_document_ids = saved_document_ids or list(document_map)
-        # Added by Ochir: ten long document titles overwhelmed the page, so the
-        # full selector stays available inside a compact collapsed section.
+        
         with st.expander(
             f"📚 Асуулт асуух баримтууд ({len(default_document_ids)}/{len(document_map)})",
             expanded=False,
@@ -1058,10 +963,8 @@ if st.session_state.logged_in:
         document_signature = make_document_signature(documents)
         rag_index = build_rag_index(document_signature)
         api_key = get_config_value("GEMINI_API_KEY")
-        model = get_config_value("GEMINI_MODEL", "gemini-3.6-flash")
+        model = get_config_value("GEMINI_MODEL", "gemini-2.5-flash")
 
-        # Added by Ochir: хэрэглэгчид ойлгомжгүй техникийн chunk count-ийг
-        # дэлгэцээс хасаж, зөвхөн сонгосон баримт болон AI загварыг харуулна.
         document_column, model_column = st.columns([1, 1.4])
         document_column.metric(
             "Сонгосон баримт",
@@ -1080,8 +983,8 @@ if st.session_state.logged_in:
 
         if not api_key:
             st.warning(
-                "Gemini API key тохируулаагүй байна. `.env.example` файлыг `.env` нэртэй "
-                "хуулж, `GEMINI_API_KEY` утгыг оруулна уу. Дэлгэрэнгүйг CHAT_SETUP.md-ээс үзнэ үү."
+                "Gemini API key тохируулаагүй байна. Streamlit Cloud тохиргооны Secrets "
+                "дотор `GEMINI_API_KEY` утгыг оруулна уу."
             )
         elif rag_index.document_count == 0:
             st.warning("AI чатад уншигдах PDF/DOCX баримт олдсонгүй.")
@@ -1148,7 +1051,6 @@ if st.session_state.logged_in:
                 response,
                 source_payload,
             )
-    # End added by Ochir: working document AI chat page.
 
 # ==========================================
 # 2. ХЭРЭВ НЭВТРЭЭГҮЙ БАЙВАЛ (LOGIN / REGISTER)
