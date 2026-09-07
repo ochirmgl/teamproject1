@@ -554,39 +554,98 @@ def view_document_dialog(doc_title, file_path, file_type):
                 text_content = f.read()
             st.text_area("Агуулга:", text_content, height=400)
             
-             # Added by Ochir: preview DOCX text and tables without Microsoft Word.
+                     # Added by Ochir: render the DOCX file as formatted pages.
         elif "wordprocessingml" in file_type.lower() or resolved_path.suffix.lower() == ".docx":
-            try:
-                from docx import Document
-                from docx.text.paragraph import Paragraph
-                from docx.table import Table
+            import html
+            import streamlit.components.v1 as components
 
-                document = Document(str(resolved_path))
+            encoded = base64.b64encode(
+                resolved_path.read_bytes()
+            ).decode("ascii")
 
-                st.caption(
-                    "Текст болон хүснэгтийн харагдац. "
-                    "Эх загвар, зургийг харах бол файлыг татаж нээнэ үү."
-                )
+            viewer_html = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none';
+               script-src 'unsafe-inline' https://cdn.jsdelivr.net;
+               style-src 'unsafe-inline';
+               img-src data: blob:;
+               font-src data: blob:;
+               connect-src 'none';">
+<style>
+    body {
+        margin: 0;
+        background: #e5e7eb;
+        color: #111827;
+        font-family: Arial, sans-serif;
+    }
+    #status {
+        padding: 16px;
+    }
+    .docx-wrapper {
+        padding: 16px !important;
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.7/dist/docx-preview.min.js"></script>
+</head>
+<body>
+<div id="status">Баримтыг нээж байна...</div>
+<div id="pages"></div>
 
-                for block in document.iter_inner_content():
-                    if isinstance(block, Paragraph):
-                        if block.text.strip():
-                            st.markdown(block.text)
+<script>
+(async function () {
+    const status = document.getElementById("status");
 
-                    elif isinstance(block, Table):
-                        rows = [
-                            [cell.text for cell in row.cells]
-                            for row in block.rows
-                        ]
-                        if rows:
-                            st.table(rows)
+    try {
+        const bytes = Uint8Array.from(
+            atob("__DOCX_DATA__"),
+            character => character.charCodeAt(0)
+        );
 
-            except Exception:
-                st.error(
-                    "Word файлыг уншиж чадсангүй. "
-                    "Эх файлыг татаж шалгана уу."
-                )
+        await docx.renderAsync(
+            bytes,
+            document.getElementById("pages"),
+            null,
+            {
+                inWrapper: true,
+                breakPages: true,
+                ignoreLastRenderedPageBreak: false,
+                renderHeaders: true,
+                renderFooters: true,
+                renderAltChunks: false,
+                useBase64URL: true
+            }
+        );
 
+        status.remove();
+    } catch (error) {
+        status.textContent =
+            "Баримтыг харуулж чадсангүй. Эх файлыг татаж нээнэ үү.";
+    }
+})();
+</script>
+</body>
+</html>
+"""
+            viewer_html = viewer_html.replace(
+                "__DOCX_DATA__", encoded
+            )
+
+            frame = (
+                '<iframe title="Word document preview" '
+                'sandbox="allow-scripts" '
+                'referrerpolicy="no-referrer" '
+                'style="width:100%;height:740px;border:0;" '
+                'srcdoc="'
+                + html.escape(viewer_html, quote=True)
+                + '"></iframe>'
+            )
+
+            components.html(frame, height=760)
 # --- БАРИМТЫГ ЗАСАХ БОЛОН ФАЙЛЫГ НЬ СОЛИХ ПОПАП ЦОНХ ---
 @st.dialog("✏️ Баримтын мэдээлэл засах")
 def edit_document_dialog(doc_id, current_title, current_desc, current_author, current_file_path):
