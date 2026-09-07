@@ -97,30 +97,12 @@ ensure_chat_schema()
 # ==========================================
 st.markdown("""
     <style>
-        /* Үндсэн дэвсгэр өнгө */
-        .stApp { background-color: #f4f7f6; color: #0f172a; }
-
-        /* Added by Ochir: Dark theme ашигласан ч үндсэн хэсгийн текстийг харагдуулна */
-        [data-testid="stMain"] h1,
-        [data-testid="stMain"] h2,
-        [data-testid="stMain"] h3,
-        [data-testid="stMain"] h4,
-        [data-testid="stMain"] p,
-        [data-testid="stMain"] label,
-        [data-testid="stMain"] [data-testid="stMetricLabel"],
-        [data-testid="stMain"] [data-testid="stMetricValue"] {
-            color: #0f172a !important;
-        }
-        [data-testid="stMain"] button p { color: inherit !important; }
-
-        /* Added by Ochir: Чатын мессежийг цагаан карт дээр тод харуулна */
-        [data-testid="stChatMessage"] {
-            background-color: #ffffff;
-            border: 1px solid #dbe4ee;
-            border-radius: 12px;
-            padding: 8px 12px;
-        }
-
+   /* Added by Ochir: use Streamlit's selected theme colors. */
+[data-testid="stChatMessage"] {
+    border: 1px solid rgba(128, 128, 128, 0.30);
+    border-radius: 12px;
+    padding: 8px 12px;
+}
         /* Added by Ochir: never collapse an AI answer to a fixed number of lines. */
         [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
         [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
