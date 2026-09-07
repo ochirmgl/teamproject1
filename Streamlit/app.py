@@ -181,7 +181,6 @@ st.markdown("""
             color: #0369a1; font-size: 0.9em; margin-top: 5px; margin-bottom: 15px;
             border-left: 4px solid #0284c7;
         }
-        h1, h2, h3 { color: #0f172a; }
         .doc-desc { color: #475569; font-size: 0.95em; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
