@@ -159,9 +159,17 @@ st.markdown("""
 
         /* Баримтын картын мэдээлэл */
         .doc-meta {
-            background-color: #e0f2fe; padding: 10px 15px; border-radius: 8px;
-            color: #0369a1; font-size: 0.9em; margin-top: 5px; margin-bottom: 15px;
-            border-left: 4px solid #0284c7;
+           /* Added by Ochir: support Light and Dark themes. */
+.doc-meta {
+    background-color: rgba(2, 132, 199, 0.10);
+    color: inherit;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    margin-top: 5px;
+    margin-bottom: 15px;
+    border-left: 4px solid #0284c7;
+}
         }
         .doc-desc { color: inherit; font-size: 0.95em; margin-bottom: 10px; }
     </style>
