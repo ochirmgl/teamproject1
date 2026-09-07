@@ -4,10 +4,11 @@ import json
 from pathlib import Path
 from auth import register_user, login_user
 import sqlite3
-import base64
+import subprocess
+import tempfile
+import shutil
 import pandas as pd
 import pypdfium2 as pdfium
-import mammoth
 from dotenv import load_dotenv
 from rag_service import DocumentRAG, RAGError, resolve_document_path
 
@@ -489,12 +490,93 @@ def answer_system_question(question, selected_document_ids, documents):
 
 
 # --- ФАЙЛЫГ ШУУД ВЭБ ДЭЭР НАЙДВАРТАЙ ХАРАХ (VIEWER DIALOG) ---
+
+def render_pdf_pages(pdf_path):
+    """PDF файлын бүх хуудсыг зураг болгон харуулна."""
+    pdf = pdfium.PdfDocument(str(pdf_path))
+
+    for page_idx in range(len(pdf)):
+        page = pdf[page_idx]
+        image = page.render(scale=2.0).to_pil()
+        st.image(image, use_container_width=True)
+
+        if page_idx < len(pdf) - 1:
+            st.divider()
+
+
+def find_libreoffice():
+    """Windows болон Streamlit Cloud/Linux дээр LibreOffice executable хайна."""
+    # Linux / Streamlit Cloud
+    soffice = shutil.which("soffice")
+    if soffice:
+        return soffice
+
+    # Зарим Linux орчинд libreoffice команд байдаг
+    libreoffice = shutil.which("libreoffice")
+    if libreoffice:
+        return libreoffice
+
+    # Windows default locations
+    possible_paths = [
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    ]
+
+    for path in possible_paths:
+        if Path(path).exists():
+            return path
+
+    return None
+
+
+def office_to_pdf(source_path, output_dir):
+    """Word / Excel файлыг LibreOffice ашиглан PDF болгоно."""
+    office_executable = find_libreoffice()
+
+    if not office_executable:
+        raise RuntimeError(
+            "LibreOffice олдсонгүй. Streamlit Cloud дээр packages.txt файлд "
+            "'libreoffice' нэмсэн эсэхээ шалгана уу."
+        )
+
+    result = subprocess.run(
+        [
+            office_executable,
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(output_dir),
+            str(source_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    expected_pdf = Path(output_dir) / f"{Path(source_path).stem}.pdf"
+
+    if not expected_pdf.exists():
+        details = (result.stderr or result.stdout or "Тодорхойгүй алдаа").strip()
+        raise RuntimeError(f"PDF хөрвүүлэлт амжилтгүй боллоо: {details}")
+
+    return expected_pdf
+
+
 @st.dialog("👀 Баримт бичиг үзэх", width="large")
 def view_document_dialog(doc_title, file_path, file_type):
-    st.markdown(f"<h3 style='color:#0284c7;'>📑 {doc_title}</h3>", unsafe_allow_html=True)
-    st.markdown(f"<div class='doc-meta'>📂 Файлын төрөл: <b>{file_type or 'Тодорхойгүй'}</b></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h3 style='color:#0284c7;'>📑 {doc_title}</h3>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div class='doc-meta'>📂 Файлын төрөл: "
+        f"<b>{file_type or 'Тодорхойгүй'}</b></div>",
+        unsafe_allow_html=True,
+    )
 
     resolved_path = local_file_path(file_path)
+
     if not resolved_path.exists():
         st.error("Файл сервер дээр олдсонгүй.")
         return
@@ -502,119 +584,89 @@ def view_document_dialog(doc_title, file_path, file_type):
     ext = resolved_path.suffix.lower()
     m_type = (file_type or "").lower()
 
-    # --- 1. PDF (Сервер дээр хуудас бүрийг зураг болгон 100% найдвартай харуулах) ---
+    # --- 1. PDF ---
     if ext == ".pdf" or "pdf" in m_type:
         try:
-            pdf = pdfium.PdfDocument(str(resolved_path))
-            num_pages = len(pdf)
-            for page_idx in range(num_pages):
-                page = pdf[page_idx]
-                image = page.render(scale=2).to_pil()
-                st.image(image, use_container_width=True)
-                if page_idx < num_pages - 1:
-                    st.divider()
+            render_pdf_pages(resolved_path)
         except Exception as e:
             st.error(f"PDF файлыг уншихад алдаа гарлаа: {e}")
 
-    # --- 2. Word (.docx - Зургийг Base64 болгож А4 цаасны загвараар найдвартай харуулах) ---
-    elif ext == ".docx" or "wordprocessingml" in m_type:
+    # --- 2. Word (.doc / .docx) ---
+    # Эх Word файлыг LibreOffice -> PDF болгон хөрвүүлээд яг хуудасны байдлаар харуулна.
+    elif (
+        ext in [".doc", ".docx"]
+        or "wordprocessingml" in m_type
+        or "msword" in m_type
+    ):
         try:
-            # Inline base64 image converter for Mammoth
-            def convert_image(image):
-                with image.open() as image_bytes:
-                    encoded_src = base64.b64encode(image_bytes.read()).decode("ascii")
-                return {
-                    "src": f"data:{image.content_type};base64,{encoded_src}"
-                }
+            with tempfile.TemporaryDirectory() as temp_dir:
+                pdf_path = office_to_pdf(resolved_path, temp_dir)
+                render_pdf_pages(pdf_path)
+        except Exception as e:
+            st.error(f"Word файлыг харахад алдаа гарлаа: {e}")
+            st.info(
+                "Streamlit Cloud ашиглаж байгаа бол GitHub repository-ийн root хэсэгт "
+                "packages.txt файл үүсгээд дотор нь `libreoffice` гэж бичсэн эсэхийг шалгана уу."
+            )
 
-            with resolved_path.open("rb") as docx_file:
-                result = mammoth.convert_to_html(
-                    docx_file,
-                    convert_image=mammoth.images.img_element(convert_image)
+    # --- 3. Excel (.xlsx / .xls) ---
+    # Excel-ийг хүснэгт хэлбэрээр шууд харуулах ба хүсвэл яг файл шиг PDF preview харуулна.
+    elif (
+        ext in [".xlsx", ".xls"]
+        or "spreadsheet" in m_type
+        or "excel" in m_type
+    ):
+        preview_mode = st.radio(
+            "Харах хэлбэр",
+            ["📊 Хүснэгт", "📄 Файл хэлбэрээр"],
+            horizontal=True,
+            key=f"excel_preview_{resolved_path.name}",
+        )
+
+        if preview_mode == "📄 Файл хэлбэрээр":
+            try:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    pdf_path = office_to_pdf(resolved_path, temp_dir)
+                    render_pdf_pages(pdf_path)
+            except Exception as e:
+                st.error(f"Excel файлыг PDF хэлбэрээр харахад алдаа гарлаа: {e}")
+                st.info(
+                    "Streamlit Cloud дээр packages.txt файлд `libreoffice` "
+                    "байгаа эсэхийг шалгана уу."
                 )
-                html_content = result.value
+        else:
+            try:
+                excel_file = pd.ExcelFile(resolved_path)
+                sheet_names = excel_file.sheet_names
 
-            doc_styled_html = f"""
-            <div style="
-                background-color: #525659;
-                padding: 30px 15px;
-                border-radius: 8px;
-                max-height: 750px;
-                overflow-y: auto;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            ">
-                <div style="
-                    background: #ffffff;
-                    color: #1a1a1a;
-                    width: 100%;
-                    max-width: 794px;
-                    min-height: 1123px;
-                    padding: 60px 70px;
-                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
-                    font-family: 'Times New Roman', Times, serif;
-                    font-size: 15px;
-                    line-height: 1.6;
-                    box-sizing: border-box;
-                ">
-                    <style>
-                        img {{
-                            max-width: 180px;
-                            height: auto;
-                            display: block;
-                            margin: 10px auto 20px auto;
-                        }}
-                        p {{
-                            margin-bottom: 12px;
-                            text-align: justify;
-                        }}
-                        table {{
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin: 15px 0;
-                        }}
-                        th, td {{
-                            border: 1px solid #444;
-                            padding: 8px 10px;
-                            font-size: 14px;
-                        }}
-                        h1, h2, h3, h4 {{
-                            font-family: 'Times New Roman', Times, serif;
-                            color: #111;
-                            text-align: center;
-                            margin-top: 15px;
-                            margin-bottom: 15px;
-                        }}
-                    </style>
-                    {html_content}
-                </div>
-            </div>
-            """
-            st.markdown(doc_styled_html, unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Word файлыг уншихад алдаа гарлаа: {e}")
+                selected_sheet = (
+                    st.selectbox("Хүснэгтийн хуудас (Sheet):", sheet_names)
+                    if len(sheet_names) > 1
+                    else sheet_names[0]
+                )
 
-    # --- 3. Excel (.xlsx, .xls) ---
-    elif ext in [".xlsx", ".xls"] or "spreadsheet" in m_type or "excel" in m_type:
+                df = pd.read_excel(resolved_path, sheet_name=selected_sheet)
+                st.dataframe(df, use_container_width=True)
+            except Exception as e:
+                st.error(f"Excel файлыг уншиж чадсангүй: {e}")
+
+    # --- 4. Зураг ---
+    elif (
+        ext in [".png", ".jpg", ".jpeg", ".webp"]
+        or any(t in m_type for t in ["image", "png", "jpeg", "jpg"])
+    ):
         try:
-            excel_file = pd.ExcelFile(resolved_path)
-            sheet_names = excel_file.sheet_names
-            selected_sheet = st.selectbox("Хүснэгтийн хуудас (Sheet):", sheet_names) if len(sheet_names) > 1 else sheet_names[0]
-            df = pd.read_excel(resolved_path, sheet_name=selected_sheet)
-            st.dataframe(df, use_container_width=True)
+            st.image(str(resolved_path), use_container_width=True)
         except Exception as e:
-            st.error(f"Excel файлыг уншиж чадсангүй: {e}")
-
-    # --- 4. Зураг (PNG, JPG, JPEG, WEBP) ---
-    elif ext in [".png", ".jpg", ".jpeg", ".webp"] or any(t in m_type for t in ["image", "png", "jpeg", "jpg"]):
-        with resolved_path.open("rb") as img_file:
-            st.image(img_file.read(), use_container_width=True)
+            st.error(f"Зургийг харуулж чадсангүй: {e}")
 
     # --- 5. Текст / CSV ---
     elif ext in [".txt", ".csv", ".log"] or "text" in m_type:
-        with resolved_path.open("r", encoding="utf-8", errors="ignore") as f:
-            st.text_area("Агуулга:", f.read(), height=450)
+        try:
+            with resolved_path.open("r", encoding="utf-8", errors="ignore") as f:
+                st.text_area("Агуулга:", f.read(), height=450)
+        except Exception as e:
+            st.error(f"Текст файлыг уншиж чадсангүй: {e}")
 
     else:
         st.info("Энэ төрлийн файлыг харах боломжгүй байна. 'Татах' товчийг ашиглана уу.")
