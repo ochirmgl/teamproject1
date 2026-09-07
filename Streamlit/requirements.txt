@@ -6,5 +6,4 @@ python-dotenv>=1.0
 pandas
 openpyxl
 pypdfium2
-mammoth
 Pillow
