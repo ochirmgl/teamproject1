@@ -516,20 +516,71 @@ def view_document_dialog(doc_title, file_path, file_type):
         except Exception as e:
             st.error(f"PDF файлыг уншихад алдаа гарлаа: {e}")
 
-    # --- 2. Word (.docx - Зургийг таслахгүйгээр HTML болгон найдвартай харуулах) ---
+    # --- 2. Word (.docx - Бодит Word / А4 цаасны загвараар харуулах) ---
     elif ext == ".docx" or "wordprocessingml" in m_type:
         try:
             with resolved_path.open("rb") as docx_file:
                 result = mammoth.convert_to_html(docx_file)
                 html_content = result.value
-            st.markdown(
-                f"""
-                <div style="background-color: white; color: #111; padding: 25px; border-radius: 8px; border: 1px solid #ddd; max-height: 700px; overflow-y: auto;">
+
+            doc_styled_html = f"""
+            <div style="
+                background-color: #525659;
+                padding: 30px 15px;
+                border-radius: 8px;
+                max-height: 750px;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            ">
+                <div style="
+                    background: #ffffff;
+                    color: #1a1a1a;
+                    width: 100%;
+                    max-width: 794px;
+                    min-height: 1123px;
+                    padding: 60px 70px;
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
+                    font-family: 'Times New Roman', Times, serif;
+                    font-size: 15px;
+                    line-height: 1.6;
+                    box-sizing: border-box;
+                ">
+                    <style>
+                        img {{
+                            max-width: 100%;
+                            height: auto;
+                            display: block;
+                            margin: 10px auto;
+                        }}
+                        p {{
+                            margin-bottom: 12px;
+                            text-align: justify;
+                        }}
+                        table {{
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin: 15px 0;
+                        }}
+                        th, td {{
+                            border: 1px solid #444;
+                            padding: 8px 10px;
+                            font-size: 14px;
+                        }}
+                        h1, h2, h3, h4 {{
+                            font-family: 'Times New Roman', Times, serif;
+                            color: #111;
+                            text-align: center;
+                            margin-top: 20px;
+                            margin-bottom: 15px;
+                        }}
+                    </style>
                     {html_content}
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
+            </div>
+            """
+            st.markdown(doc_styled_html, unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Word файлыг уншихад алдаа гарлаа: {e}")
 
