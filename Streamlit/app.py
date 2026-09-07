@@ -516,11 +516,22 @@ def view_document_dialog(doc_title, file_path, file_type):
         except Exception as e:
             st.error(f"PDF файлыг уншихад алдаа гарлаа: {e}")
 
-    # --- 2. Word (.docx - Бодит Word / А4 цаасны загвараар харуулах) ---
+    # --- 2. Word (.docx - Зургийг Base64 болгож А4 цаасны загвараар найдвартай харуулах) ---
     elif ext == ".docx" or "wordprocessingml" in m_type:
         try:
+            # Inline base64 image converter for Mammoth
+            def convert_image(image):
+                with image.open() as image_bytes:
+                    encoded_src = base64.b64encode(image_bytes.read()).decode("ascii")
+                return {
+                    "src": f"data:{image.content_type};base64,{encoded_src}"
+                }
+
             with resolved_path.open("rb") as docx_file:
-                result = mammoth.convert_to_html(docx_file)
+                result = mammoth.convert_to_html(
+                    docx_file,
+                    convert_image=mammoth.images.img_element(convert_image)
+                )
                 html_content = result.value
 
             doc_styled_html = f"""
@@ -549,10 +560,10 @@ def view_document_dialog(doc_title, file_path, file_type):
                 ">
                     <style>
                         img {{
-                            max-width: 100%;
+                            max-width: 180px;
                             height: auto;
                             display: block;
-                            margin: 10px auto;
+                            margin: 10px auto 20px auto;
                         }}
                         p {{
                             margin-bottom: 12px;
@@ -572,7 +583,7 @@ def view_document_dialog(doc_title, file_path, file_type):
                             font-family: 'Times New Roman', Times, serif;
                             color: #111;
                             text-align: center;
-                            margin-top: 20px;
+                            margin-top: 15px;
                             margin-bottom: 15px;
                         }}
                     </style>
