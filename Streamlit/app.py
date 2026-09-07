@@ -158,8 +158,7 @@ st.markdown("""
         }
 
         /* Баримтын картын мэдээлэл */
-        .doc-meta {
-           /* Added by Ochir: support Light and Dark themes. */
+        /* Added by Ochir: support Light and Dark themes. */
 .doc-meta {
     background-color: rgba(2, 132, 199, 0.10);
     color: inherit;
@@ -170,7 +169,6 @@ st.markdown("""
     margin-bottom: 15px;
     border-left: 4px solid #0284c7;
 }
-        }
         .doc-desc { color: inherit; font-size: 0.95em; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
@@ -682,12 +680,24 @@ if st.session_state.logged_in:
                 search_query = st.text_input("🔍 Баримт хайх (Гарчиг эсвэл зохиогчоор)...", placeholder="Энд бичиж хайна уу...")
                 conn = open_database()
                 cursor = conn.cursor()
-                if search_query:
-                    cursor.execute('''SELECT id, title, description, file_path, file_type, source_author, upload_date FROM documents WHERE title LIKE ? OR source_author LIKE ? ORDER BY id DESC''', (f'%{search_query}%', f'%{search_query}%'))
-                else:
-                    cursor.execute('''SELECT id, title, description, file_path, file_type, source_author, upload_date FROM documents ORDER BY id DESC''')
+                                # Added by Ochir: case-insensitive Mongolian/English search.
+                cursor.execute("""
+                    SELECT id, title, description, file_path, file_type,
+                           source_author, upload_date
+                    FROM documents
+                    ORDER BY id DESC
+                """)
                 documents = cursor.fetchall()
                 conn.close()
+
+                search_term = search_query.strip().casefold()
+
+                if search_term:
+                    documents = [
+                        doc for doc in documents
+                        if search_term in (doc[1] or "").casefold()
+                        or search_term in (doc[5] or "").casefold()
+                    ]
 
                 if documents:
                     for doc in documents:
@@ -783,12 +793,24 @@ if st.session_state.logged_in:
             search_query = st.text_input("🔍 Баримт хайх (Гарчиг эсвэл зохиогчоор)...", placeholder="Хайх үгээ бичнэ үү...")
             conn = open_database()
             cursor = conn.cursor()
-            if search_query:
-                cursor.execute('''SELECT id, title, description, file_path, file_type, source_author, upload_date FROM documents WHERE title LIKE ? OR source_author LIKE ? ORDER BY id DESC''', (f'%{search_query}%', f'%{search_query}%'))
-            else:
-                cursor.execute('''SELECT id, title, description, file_path, file_type, source_author, upload_date FROM documents ORDER BY id DESC''')
+                       # Added by Ochir: case-insensitive Mongolian/English search.
+            cursor.execute("""
+                SELECT id, title, description, file_path, file_type,
+                       source_author, upload_date
+                FROM documents
+                ORDER BY id DESC
+            """)
             documents = cursor.fetchall()
             conn.close()
+
+            search_term = search_query.strip().casefold()
+
+            if search_term:
+                documents = [
+                    doc for doc in documents
+                    if search_term in (doc[1] or "").casefold()
+                    or search_term in (doc[5] or "").casefold()
+                ]
 
             if documents:
                 for doc in documents:
