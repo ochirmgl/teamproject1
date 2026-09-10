@@ -286,17 +286,17 @@ class DocumentRAG:
                 continue
 
             try:
-                suffix = path.suffix.lower()
-                if suffix == ".pdf":
-                    sections = _extract_pdf(path)
-                elif suffix == ".docx":
-                    sections = _extract_docx(path)
-                elif suffix == ".txt":
-                    sections = _extract_text_file(path)
+                from processing import extract, process_document
+                database_path = self.base_dir / 'dms_system.db'
+                if database_path.exists():
+                    status, warning, sections = process_document(document_id, self.base_dir, path=database_path)
                 else:
-                    self.errors.append(f"AI чат дэмжихгүй файлын төрөл: {path.name}")
+                    status, warning, sections = extract(path)
+                if warning:
+                    self.errors.append(f'{title}: {warning}')
+                if status not in ('ready', 'partial'):
                     continue
-            except RAGError as exc:
+            except Exception as exc:
                 self.errors.append(str(exc))
                 continue
 

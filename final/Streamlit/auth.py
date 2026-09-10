@@ -1,6 +1,7 @@
 import sqlite3
 import hashlib
 from pathlib import Path
+from database import open_database
 
 
 DB_PATH = Path(__file__).resolve().parent / "dms_system.db"
@@ -11,7 +12,7 @@ def hash_password(password):
 
 def register_user(username, password):
     """Шинэ хэрэглэгчийг өгөгдлийн санд бүртгэх функц"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = open_database(DB_PATH)
     cursor = conn.cursor()
     pwd_hash = hash_password(password)
     role_id = 2 # Автоматаар User эрхтэй
@@ -32,7 +33,7 @@ def register_user(username, password):
 
 def login_user(username, password):
     """Хэрэглэгчийг нэвтрүүлэх болон эрхийг нь шалгах функц"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = open_database(DB_PATH)
     cursor = conn.cursor()
     
     pwd_hash = hash_password(password)
