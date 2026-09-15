@@ -1,6 +1,7 @@
 import sqlite3
 import hashlib
 from pathlib import Path
+from database import open_database
 
 
 DB_PATH = Path(__file__).resolve().parent / "dms_system.db"
@@ -11,18 +12,18 @@ def hash_password(password):
 
 def register_user(username, password):
     """Шинэ хэрэглэгчийг өгөгдлийн санд бүртгэх функц"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = open_database(DB_PATH)
     cursor = conn.cursor()
     pwd_hash = hash_password(password)
     role_id = 2 # Автоматаар User эрхтэй
     
     try:
         cursor.execute(
-            "INSERT INTO users (username, password_hash, role_id) VALUES (?, ?, ?)",
+            "INSERT INTO users (username, password_hash, role_id, status) VALUES (?, ?, ?, 'inactive')",
             (username, pwd_hash, role_id)
         )
         conn.commit()
-        return True, "Амжилттай бүртгэгдлээ! Та одоо нэвтэрч орно уу."
+        return True, "Бүртгэл үүслээ. Администратор эрхийг идэвхжүүлсний дараа нэвтэрнэ үү."
     except sqlite3.IntegrityError:
         return False, "Энэ нэвтрэх нэр аль хэдийн бүртгэгдсэн байна!"
     except Exception as e:
@@ -32,7 +33,7 @@ def register_user(username, password):
 
 def login_user(username, password):
     """Хэрэглэгчийг нэвтрүүлэх болон эрхийг нь шалгах функц"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = open_database(DB_PATH)
     cursor = conn.cursor()
     
     pwd_hash = hash_password(password)

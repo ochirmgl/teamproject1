@@ -1,0 +1,3 @@
+# Optional: preinstall a multilingual SentenceTransformer model locally and set
+# SEMANTIC_MODEL_PATH. No documents are sent to an embedding API.
+sentence-transformers>=3.0
